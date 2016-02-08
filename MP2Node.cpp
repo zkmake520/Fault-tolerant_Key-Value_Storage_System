@@ -107,10 +107,47 @@ size_t MP2Node::hashFunction(string key) {
  * 				2) Finds the replicas of this key
  * 				3) Sends a message to the replica
  */
+
+
+void MP2Node::clientCreateOrUpdate(string key,string value, MessageType messageType){
+	vector<Node> addrVec = findNodes(key);
+	if(addrVec == NULL || addrVec.size() == 0){
+		return;
+	}
+	Message ** messageVec = (Message *)malloc(sizeof(Message *)*addVec.size());
+	int transID = 1;
+	if(messageVec == NULL){
+		return;
+	}
+	else{
+		for(int i = 0, replicaType = PRIMARY;i <addrVec.size(); i++,replicaTyp++){
+			Message * message = new Message(transID,getMemberNode->addr,messageType,key,value,static_cast<ReplicaType>(replicaType));
+			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),(char *) message,sizeof(Message));
+		}
+	}
+	return;
+}
+
+void MP2Node::clientReadOrDelete(string key,MessageType messageType){
+	vector<Node> addrVec = findNodes(key);
+	if(addrVec == NULL || addrVec.size() == 0){
+		return;
+	}
+	Message ** messageVec = (Message *)malloc(sizeof(Message *)*addVec.size());
+	int transID = 1;
+	if(messageVec == NULL){
+		return;
+	}
+	else{
+		for(int i = 0;i <addrVec.size(); i++){
+			Message * message = new Message(transID,getMemberNode->addr,messageType,key);
+			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),(char *) message,sizeof(Message));
+		}
+	}
+	return;
+}
 void MP2Node::clientCreate(string key, string value) {
-	/*
-	 * Implement this
-	 */
+	clientCreateOrUpdate(key,value,CREATE);
 }
 
 /**
@@ -123,9 +160,7 @@ void MP2Node::clientCreate(string key, string value) {
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientRead(string key){
-	/*
-	 * Implement this
-	 */
+	clientReadOrDelete(key,READ);
 }
 
 /**
@@ -138,9 +173,7 @@ void MP2Node::clientRead(string key){
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientUpdate(string key, string value){
-	/*
-	 * Implement this
-	 */
+	clientCreateOrUpdate(key,value,UPDATE);
 }
 
 /**
@@ -153,9 +186,7 @@ void MP2Node::clientUpdate(string key, string value){
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientDelete(string key){
-	/*
-	 * Implement this
-	 */
+	clientReadOrDelete(key,DELETE);
 }
 
 /**
@@ -167,11 +198,12 @@ void MP2Node::clientDelete(string key){
  * 			   	2) Return true or false based on success or failure
  */
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
-	/*
-	 * Implement this
-	 */
 	// Insert key, value, replicaType into the hash table
+	//TODO: should insert replicaType?
+	return ht->create(key,value);
+
 }
+
 
 /**
  * FUNCTION NAME: readKey
@@ -182,10 +214,8 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
  * 			    2) Return value
  */
 string MP2Node::readKey(string key) {
-	/*
-	 * Implement this
-	 */
 	// Read key from local hash table and return value
+	return ht->read(key);
 }
 
 /**
@@ -197,10 +227,8 @@ string MP2Node::readKey(string key) {
  * 				2) Return true or false based on success or failure
  */
 bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
-	/*
-	 * Implement this
-	 */
 	// Update key in local hash table and return true or false
+	return ht->update(key,value);
 }
 
 /**
@@ -212,10 +240,8 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  * 				2) Return true or false based on success or failure
  */
 bool MP2Node::deletekey(string key) {
-	/*
-	 * Implement this
-	 */
 	// Delete the key from the local hash table
+	return ht->deleteKey(key);
 }
 
 /**
@@ -251,6 +277,7 @@ void MP2Node::checkMessages() {
 		/*
 		 * Handle the message types here
 		 */
+		
 
 	}
 
@@ -278,10 +305,13 @@ vector<Node> MP2Node::findNodes(string key) {
 		}
 		else {
 			// go through the ring until pos <= node
+			// 
+			// TODO: improve by using binary search
 			for (int i=1; i<ring.size(); i++){
 				Node addr = ring.at(i);
 				if (pos <= addr.getHashCode()) {
 					addr_vec.emplace_back(addr);
+					//i+1 % size  GOOD Implemenation about corner case
 					addr_vec.emplace_back(ring.at((i+1)%ring.size()));
 					addr_vec.emplace_back(ring.at((i+2)%ring.size()));
 					break;
