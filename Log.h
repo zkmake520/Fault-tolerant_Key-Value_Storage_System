@@ -37,6 +37,16 @@ public:
 	void LOG(Address *, const char * str, ...);
 	void logNodeAdd(Address *, Address *);
 	void logNodeRemove(Address *, Address *);
+	// success
+	void logCreateSuccess(Address * address, bool isCoordinator, int transID, string key, string value);
+	void logReadSuccess(Address * address, bool isCoordinator, int transID, string key, string value);
+	void logUpdateSuccess(Address * address, bool isCoordinator, int transID, string key, string newValue);
+	void logDeleteSuccess(Address * address, bool isCoordinator, int transID, string key);
+	// fail
+	void logCreateFail(Address * address, bool isCoordinator, int transID, string key, string value);
+	void logReadFail(Address * address, bool isCoordinator, int transID, string key);
+	void logUpdateFail(Address * address, bool isCoordinator, int transID, string key, string newValue);
+	void logDeleteFail(Address * address, bool isCoordinator, int transID, string key);
 };
 
 #endif /* _LOG_H_ */

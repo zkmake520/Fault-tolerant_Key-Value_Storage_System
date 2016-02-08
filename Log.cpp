@@ -129,3 +129,132 @@ void Log::logNodeRemove(Address *thisNode, Address *removedAddr) {
 	sprintf(stdstring, "Node %d.%d.%d.%d:%d removed at time %d", removedAddr->addr[0], removedAddr->addr[1], removedAddr->addr[2], removedAddr->addr[3], *(short *)&removedAddr->addr[4], par->getcurrtime());
     LOG(thisNode, stdstring);
 }
+
+/**
+ * FUNCTION NAME: logCreateSuccess
+ *
+ * DESCRTION: Call this function after successfully create a key value pair
+ */
+void Log::logCreateSuccess(Address * address, bool isCoordinator, int transID, string key, string value){
+	static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: create success at time %d, transID=%d, key=%s, value=%s", str.c_str(), par->getcurrtime(), transID, key.c_str(), value.c_str());
+    LOG(address, stdstring);
+}
+
+/**
+ * FUNCTION NAME: logReadSuccess
+ *
+ * DESCRIPTION: Call this function after successfully reading a key
+ */
+void Log::logReadSuccess(Address * address, bool isCoordinator, int transID, string key, string value){
+    static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: read success at time %d, transID=%d, key=%s, value=%s", str.c_str(), par->getcurrtime(), transID, key.c_str(), value.c_str());
+    LOG(address, stdstring);
+}
+
+/**
+ * FUNCTION NAME: logUpdateSuccess
+ *
+ * DESCRIPTION: Call this function after successfully updating a key
+ */
+void Log::logUpdateSuccess(Address * address, bool isCoordinator, int transID, string key, string newValue){
+    static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: update success at time %d, transID=%d, key=%s, value=%s", str.c_str(), par->getcurrtime(), transID, key.c_str(), newValue.c_str());
+    LOG(address, stdstring);
+}
+
+/**
+ * FUNCTION NAME: logDeleteSuccess
+ *
+ * DESCRIPTION: Call this function after successfully deleting a key
+ */
+void Log::logDeleteSuccess(Address * address, bool isCoordinator, int transID, string key){
+    static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: delete success at time %d, transID=%d, key=%s", str.c_str(), par->getcurrtime(), transID, key.c_str());
+    LOG(address, stdstring);
+}
+
+/**
+ * FUNCTION NAME: logCreateFail
+ *
+ * DESCRIPTION: Call this function if CREATE failed
+ */
+void Log::logCreateFail(Address * address, bool isCoordinator, int transID, string key, string value){
+	static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: create fail at time %d, transID=%d, key=%s, value=%s", str.c_str(), par->getcurrtime(), transID, key.c_str(), value.c_str());
+    LOG(address, stdstring);
+}
+
+
+/**
+ * FUNCTION NAME: logReadFail
+ *
+ * DESCRIPTION: Call this function if READ failed
+ */
+void Log::logReadFail(Address * address, bool isCoordinator, int transID, string key){
+    static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: read fail at time %d, transID=%d, key=%s", str.c_str(), par->getcurrtime(), transID, key.c_str());
+    LOG(address, stdstring);
+}
+
+/**
+ * FUNCTION NAME: logUpdateFail
+ *
+ * DESCRIPTION: Call this function if UPDATE failed
+ */
+void Log::logUpdateFail(Address * address, bool isCoordinator, int transID, string key, string newValue){
+    static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: update fail at time %d, transID=%d, key=%s, value=%s", str.c_str(), par->getcurrtime(), transID, key.c_str(), newValue.c_str());
+    LOG(address, stdstring);
+}
+
+/**
+ * FUNCTION NAME: logDeleteFail
+ *
+ * DESCRIPTION: Call this function if DELETE failed
+ */
+void Log::logDeleteFail(Address * address, bool isCoordinator, int transID, string key){
+    static char stdstring[100];
+	string str;
+	if (isCoordinator)
+		str = "coordinator";
+	else
+		str = "server";
+	sprintf(stdstring, "%s: delete fail at time %d, transID=%d, key=%s", str.c_str(), par->getcurrtime(), transID, key.c_str());
+    LOG(address, stdstring);
+}
