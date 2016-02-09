@@ -29,6 +29,11 @@
  * 				3) Server side CRUD APIs
  * 				4) Client side CRUD APIs
  */
+typedef struct transactionInfo{
+	MessageType messageType;
+	int startTime;
+	int replyCount = 0;
+}TransInfo
 class MP2Node {
 private:
 	// Vector holding the next two neighbors in the ring who have my replicas
@@ -47,6 +52,8 @@ private:
 	EmulNet * emulNet;
 	// Object of Log
 	Log * log;
+	// transaction record
+	map<int,TransInfo> transInfos;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);

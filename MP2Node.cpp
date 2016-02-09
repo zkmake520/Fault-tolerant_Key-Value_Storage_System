@@ -51,12 +51,28 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
-
-
+	bool stabilization = ring.size()==curMemList.size()?false:true;
+	if(!stabilization){
+		for(int i = 0;i < curMemList.size(); i++){
+			if(!(ring[i].nodeAddress == curMemList.nodeAddress)){
+				stabilization = true;
+				break;
+			}
+		}
+		if(stabilization){
+			ring = curMemList;
+		}
+	}
+	else{
+		ring = curMemList;
+	}
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+	if(stabilization == true && ring.size() > 0){
+		stabilizationProtocol();
+	}
 }
 
 /**
@@ -109,6 +125,14 @@ size_t MP2Node::hashFunction(string key) {
  */
 
 
+void MP2Node::pushNewTransactionInfo(int transId, MessageType messageType){
+	TransInfo transInfo;
+	transInfo->replyCount = 0;
+	transInfo->messageType = messageType;
+	transInfo->startTime = par->getcurrtime();
+	transInfos.emplace(transId,transInfo);
+	return;
+}
 void MP2Node::clientCreateOrUpdate(string key,string value, MessageType messageType){
 	vector<Node> addrVec = findNodes(key);
 	if(addrVec == NULL || addrVec.size() == 0){
@@ -122,9 +146,10 @@ void MP2Node::clientCreateOrUpdate(string key,string value, MessageType messageT
 	else{
 		for(int i = 0, replicaType = PRIMARY;i <addrVec.size(); i++,replicaTyp++){
 			Message * message = new Message(transID,getMemberNode->addr,messageType,key,value,static_cast<ReplicaType>(replicaType));
-			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),(char *) message,sizeof(Message));
+			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),message->toString());
 		}
 	}
+	pushNewTransactionInfo(transId,messageType);
 	return;
 }
 
@@ -134,16 +159,17 @@ void MP2Node::clientReadOrDelete(string key,MessageType messageType){
 		return;
 	}
 	Message ** messageVec = (Message *)malloc(sizeof(Message *)*addVec.size());
-	int transID = 1;
+	int transId = g_transID++;
 	if(messageVec == NULL){
 		return;
 	}
 	else{
 		for(int i = 0;i <addrVec.size(); i++){
-			Message * message = new Message(transID,getMemberNode->addr,messageType,key);
-			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),(char *) message,sizeof(Message));
+			Message * message = new Message(transId,getMemberNode->addr,messageType,key);
+			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
 		}
 	}
+	pushNewTransactionInfo(transId,messageType);
 	return;
 }
 void MP2Node::clientCreate(string key, string value) {
@@ -199,8 +225,9 @@ void MP2Node::clientDelete(string key){
  */
 bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 	// Insert key, value, replicaType into the hash table
-	//TODO: should insert replicaType?
-	return ht->create(key,value);
+	Entry entry (value,par->getcurrtime(),replica);
+	string newVal = entry.convertToString();
+	return ht->create(key,newVal);
 
 }
 
@@ -228,7 +255,9 @@ string MP2Node::readKey(string key) {
  */
 bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
 	// Update key in local hash table and return true or false
-	return ht->update(key,value);
+	Entry entry (value,par->getcurrtime(),replica);
+	string newVal = entry.convertToString();
+	return ht->update(key,newVal);
 }
 
 /**
@@ -244,6 +273,21 @@ bool MP2Node::deletekey(string key) {
 	return ht->deleteKey(key);
 }
 
+
+void sendReplyMessage(MessageType type, Message *msg, string val){
+	Message * replyMessage = new Message(msg->transId,getMemberNode()->addr,val);
+	emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
+	delete(replyMessage);
+}
+void sendReplyMessage(MessageType type, Message *msg, bool ifSuccess){
+	if(msg->transId != -1){
+		Message * replyMessage = new Message(msg->transId,getMemberNode()->addr, REPLY,ifSuccess);
+		emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
+		delete(replyMessage);
+	}	
+	return;
+}
+
 /**
  * FUNCTION NAME: checkMessages
  *
@@ -254,7 +298,7 @@ bool MP2Node::deletekey(string key) {
  */
 void MP2Node::checkMessages() {
 	/*
-	 * Implement this. Parts of it are already implemented
+	 * Implement this. 		Parts of it are already implemented
 	 */
 	char * data;
 	int size;
@@ -277,7 +321,56 @@ void MP2Node::checkMessages() {
 		/*
 		 * Handle the message types here
 		 */
-		
+		Message * msg = new Message(message);
+		bool notCoordinator = false;
+		switch(msg->type){
+			case CREATE:
+				bool ifSuccess = createKeyValue(msg->key,msg->value,msg->replica);
+				if(ifSuccess){
+					log->logCreateSuccess(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,msg->value);
+				}
+				else{
+					log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,msg->value);	
+				}
+				sendReplyMessage(CREATE,msg,ifSuccess);
+				break;
+			case READ:
+				String val = read(msg->key);
+				if(val == NULL){
+					log->logReadSuccess(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,val);
+				}
+				else{
+					log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key);
+				}
+				sendReplyMessage(READ,msg,val);
+				break;
+			case UPDATE:
+				ifSucceess = updateKeyValue(msg->key,msg->value,msg->replica);
+				if(ifSuccess){
+					log->logCreateSuccess(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,msg->value);
+				}
+				else{
+					log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,msg->value);	
+				}
+				sendReplyMessage(UPDATE,msg,ifSuccess);
+				break;
+			case DELETE:
+				ifSuccess = deletekey(msg->key);
+				if(ifSuccess){
+					log->logDeleteSuccess(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key);
+				}
+				else{
+					log->logDeleteFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key);	
+				}
+				sendReplyMessage(DELETE,msg,ifSuccess);
+				break;
+			case REPLY:
+				replyMessageHandler(msg);
+				break;
+			case READREPLY:
+				break;
+		}
+				
 
 	}
 
