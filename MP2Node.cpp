@@ -8,6 +8,7 @@
 /**
  * constructor
  */
+#define QUORUM 2
 MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, Address * address) {
 	this->memberNode = memberNode;
 	this->par = par;
@@ -66,11 +67,25 @@ void MP2Node::updateRing() {
 	else{
 		ring = curMemList;
 	}
+
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
 	if(stabilization == true && ring.size() > 0){
+		//first 
+		hasMyReplicas.clear();
+		haveReplicasOf.clear();
+		int i =0;
+		for(i = 0;i < ring.size(); i++){
+			if(ring[i].nodeAddress == getMemberNode().nodeAddress){
+				break;
+			}
+		}
+		hasMyReplicas.push_back(ring[(i+1)%RING_SIZE]);
+		hasMyReplicas.push_back(ring[(i+2)%RING_SIZE]);
+		haveReplicasOf.push_back(ring[(i-1)%RING_SIZE]);
+		haveReplicasOf.push_back(ring[(i-2)%RING_SIZE]);
 		stabilizationProtocol();
 	}
 }
@@ -125,11 +140,14 @@ size_t MP2Node::hashFunction(string key) {
  */
 
 
-void MP2Node::pushNewTransactionInfo(int transId, MessageType messageType){
+void MP2Node::pushNewTransactionInfo(string key, string value,int transId, MessageType messageType){
 	TransInfo transInfo;
-	transInfo->replyCount = 0;
+	transInfo->positiveReplyCount = 0;
+	transInfo->negativeReplyCount = 0;
 	transInfo->messageType = messageType;
 	transInfo->startTime = par->getcurrtime();
+	transInfo->key = key;
+	transInfo->value = value;
 	transInfos.emplace(transId,transInfo);
 	return;
 }
@@ -149,7 +167,7 @@ void MP2Node::clientCreateOrUpdate(string key,string value, MessageType messageT
 			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),message->toString());
 		}
 	}
-	pushNewTransactionInfo(transId,messageType);
+	pushNewTransactionInfo(key,value,transId,messageType);
 	return;
 }
 
@@ -169,7 +187,7 @@ void MP2Node::clientReadOrDelete(string key,MessageType messageType){
 			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
 		}
 	}
-	pushNewTransactionInfo(transId,messageType);
+	pushNewTransactionInfo(key,NULL,transId,messageType);
 	return;
 }
 void MP2Node::clientCreate(string key, string value) {
@@ -274,14 +292,85 @@ bool MP2Node::deletekey(string key) {
 }
 
 
-void sendReplyMessage(MessageType type, Message *msg, string val){
+
+void MP2Node::replyMessageHandler(Message * msg){
+	bool coordinator = true;
+	int transId = msg->transID;
+	map<int,transInfo>::iterator it;
+	it = transInfos.find(transId);
+  	if (it != transInfos.end()){
+		if(msg->success){
+	  			//if success replies have sum up to QUORUM, then coordinator knows the transaction is successful
+	  			if(++it->second.positiveReplyCount >= QUORUM){
+	  				if(msg->type == READREPLY){
+						log->logReadSuccess(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,msg->value);
+	  				}
+	  				else if(msg->type == REPLY){
+		  				switch(it->second.messageType){
+
+		  					case CREATE:
+		  						log->logCreateSuccess(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,it->second.value);
+		  						break;
+		  					case UPDATE:
+		  						log->logUpdateSuccess(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,it->second.value);
+		  						break;
+		  					case DELETE:
+		  						log->logDeleteSuccess((&(getMemberNode()->addr),coordinator,msg->transId,it->second.key);
+		  						break;
+		  					case READREPLY:
+		  						
+		  					default:
+		  						break;
+		  				}	
+		  				transInfos.erase(it);
+	  				}
+	  				else{
+	  					//wrong
+	  				}
+	  			}
+	  		}
+		}
+		else{
+			if(++it->second.negativeReplyCount >= QUORUM){
+				if(msg->type == READREPLY){
+					log->logReadFail(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,msg->value);
+				}
+				else if(msg->type == REPLY){
+	  				switch(it->second.messageType){
+	  					case CREATE:
+	  						log->logCreateFail(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,it->second.value);
+	  						break;
+	  					case UPDATE:
+	  						log->logUpdateFail(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,it->second.value);
+	  						break;
+	  					case DELETE:
+	  						log->logDeleteFail((&(getMemberNode()->addr),coordinator,msg->transId,it->second.key);
+	  						break;
+
+	  				}	
+	  				transInfos.erase(it);
+				}
+				else{
+					//wrong message
+				}
+
+			}	
+		}
+	}
+	else{
+		cout<<"Reply Message Wrong "<<msg->transID<<endl;
+	}
+}
+
+void MP2Node::sendReplyMessage(Message *msg, string val){
 	Message * replyMessage = new Message(msg->transId,getMemberNode()->addr,val);
 	emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
 	delete(replyMessage);
 }
-void sendReplyMessage(MessageType type, Message *msg, bool ifSuccess){
+
+void MP2Node::sendReplyMessage(Message *msg, bool ifSuccess){
 	if(msg->transId != -1){
-		Message * replyMessage = new Message(msg->transId,getMemberNode()->addr, REPLY,ifSuccess);
+		Message * replyMessage = new Message(msg->transId,getMemberNode()->addr,REPLY,ifSuccess);
 		emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
 		delete(replyMessage);
 	}	
@@ -332,7 +421,7 @@ void MP2Node::checkMessages() {
 				else{
 					log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,msg->value);	
 				}
-				sendReplyMessage(CREATE,msg,ifSuccess);
+				sendReplyMessage(msg,ifSuccess);
 				break;
 			case READ:
 				String val = read(msg->key);
@@ -342,7 +431,7 @@ void MP2Node::checkMessages() {
 				else{
 					log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key);
 				}
-				sendReplyMessage(READ,msg,val);
+				sendReplyMessage(msg,val);
 				break;
 			case UPDATE:
 				ifSucceess = updateKeyValue(msg->key,msg->value,msg->replica);
@@ -352,7 +441,7 @@ void MP2Node::checkMessages() {
 				else{
 					log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key,msg->value);	
 				}
-				sendReplyMessage(UPDATE,msg,ifSuccess);
+				sendReplyMessage(msg,ifSuccess);
 				break;
 			case DELETE:
 				ifSuccess = deletekey(msg->key);
@@ -362,12 +451,13 @@ void MP2Node::checkMessages() {
 				else{
 					log->logDeleteFail(&(getMemberNode()->addr),notCoordinator,msg->transId,msg->key);	
 				}
-				sendReplyMessage(DELETE,msg,ifSuccess);
+				sendReplyMessage(msg,ifSuccess);
 				break;
 			case REPLY:
 				replyMessageHandler(msg);
 				break;
 			case READREPLY:
+				readReplyMessageHandler(msg);
 				break;
 		}
 				
@@ -448,7 +538,5 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
  */
 void MP2Node::stabilizationProtocol() {
-	/*
-	 * Implement this
-	 */
+		
 }

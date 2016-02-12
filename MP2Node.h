@@ -32,7 +32,10 @@
 typedef struct transactionInfo{
 	MessageType messageType;
 	int startTime;
-	int replyCount = 0;
+	int positiveReplyCount;
+	int negativeReplyCount;
+	string key;
+	string value;
 }TransInfo
 class MP2Node {
 private:
