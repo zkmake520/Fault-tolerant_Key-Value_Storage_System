@@ -69,49 +69,19 @@ void MP2Node::updateRing() {
 	sort(curMemList.begin(), curMemList.end());
 	bool stabilization = false;
 	//get all joined nodes and failed nodes
-	vector<int> joinedNodes;
-	vector<int> failedNodes;
-	int i = 0;
-	int j = 0;
-	while(i < ring.size() && j < curMemList.size()){
-		if(ring[i].getHashCode() == curMemList[j].getHashCode()){
-			i++,j++;
+	
+	for(int i =0; i < curMemList.size(); i++){
+		if(i == ring.size() || ring[i].nodeAddress != curMemList[i].nodeAddress){
+			stabilization = true;
+			break;
 		}
-		else if(ring[i].getHashCode() < curMemList[j].getHashCode()){
-			failedNodes.push_back(ring[i].getHashCode());
-			i++;
-		}
-		else {
-			joinedNodes.push_back(curMemList[j].getHashCode());
-			j++;
-		}
-	}
-	while(i < ring.size()){
-		failedNodes.push_back(ring[i++].getHashCode());
-	}
-	while(j < curMemList.size()){
-		joinedNode.push_back(curMemList[j++].getHashCode());
-	}
-
-	if(joinedNodes.size() != 0 || failedNodes.size() != 0){
-		//new joined nodes or failed nodes
-		stabilization == true;
 	}
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
 	if(stabilization == true ){
-		//first 
-		// hasMyReplicas.clear();
-		// haveReplicasOf.clear();
-		// int i =0;
-		// }
-		// hasMyReplicas.push_back(ring[(i+1)%RING_SIZE]);
-		// hasMyReplicas.push_back(ring[(i+2)%RING_SIZE]);
-		// haveReplicasOf.push_back(ring[(i-1)%RING_SIZE]);
-		// haveReplicasOf.push_back(ring[(i-2)%RING_SIZE]);
-		stabilizationProtocol(joinedNodes,failedNodes,ring,curMemList);
+		stabilizationProtocol(curMemList);
 	}
 	ring = curMemList;
 }
@@ -565,7 +535,21 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
  */
 
-void MP2Node::updateOrDeleteReplica(Node &node, idx,Message &message, ReplicaType type){
+void MP2Node::updateLocalReplicaToPrimary(ReplicaType type){
+	map<string, string>::iterator it;
+	// create replicas on two successor nodes
+	for(it = ht->hashTable.begin(); it != ht->hashTable.end(); it++)
+	{
+		Entry * entry = new Entry(it->second);
+		if(entry->replica == type){
+			entry->replica = PRIMARY;
+			hashTable.at(it->first)= entry->converToString();
+		}
+		delete(entry);
+	}
+
+}
+void MP2Node::updateOrDeleteReplica(Node &node, idx, MessageType messageType, ReplicaType type,ReplicaType replicaType){
 	map<string, string>::iterator it;
 	// create replicas on two successor nodes
 	for(it = ht->hashTable.begin(); it != ht->hashTable.end(); it++)
@@ -575,40 +559,36 @@ void MP2Node::updateOrDeleteReplica(Node &node, idx,Message &message, ReplicaTyp
 			string value = entry->value;
 			string key = it->first;
 			//about the transId?
-			Message message (-1,getMemberNode()->addr,CREATE,key,value,SECONDARY);
+			Message message (-1,getMemberNode()->addr,messageType,key,value,replicaType);
 			emulNet->ENsend(&(memberNode->addr),&(node.nodeAddress),message->toString());
 		}
 		delete(entry);
 	}
 }
-void MP2Node::stabilizationProtocol(vector<int> & joinedNodes, vector<int> & failedNodes,
-									vector<Node> & ring, vector<Node> & newRing) {
+void MP2Node::stabilizationProtocol( vector<Node> & newRing) {
 
 	//The whole process of stabilization is a little bit intricated
 	//better spend some time to think clearly of it
+	//The total idea is that current node has three types of replicas, so copy or replicate them one by one!
+	//Also only need to consider copying them to its two  successors!!!
 	int idx = getIndexInRing(newRing);
 	int secondReplica = (idx+1) % newRing.size();
 	int thirdReplica = (idx+2) % newRing.size();
+
 	if(hasMyReplicas.size() == 0){
 		//current nodes's hashMyReplicas has not been set yet
-		Message message (-1,getMemberNode()->addr,CREATE,key,value,SECONDARY);
-		updateOrDeleteReplica(newRing[secondReplica],idx,message,PRIMARY);
-		Message message2 (-1,getMemberNode()->addr,CREATE,key,value,TERTIARY);
-		updateOrDeleteReplica(newRing[thirdReplica],idx,message2,PRIMARY);
+		updateOrDeleteReplica(newRing[secondReplica],idx,CREATE,PRIMARY,SECONDARY);
+		updateOrDeleteReplica(newRing[thirdReplica],idx,CREATE,PRIMARY,TERTIARY);
 	}
 	else{
 		//if new successor is not same as original ones. Delete keys in original replicas and update new replicas
 		if(newRing[secondReplica].nodeAddress != hasMyReplicas[0].nodeAddress){
-			Message message (-1,getMemberNode()->addr,DELETE,key);
-			updateOrDeleteReplica(hasMyReplicas[0],idx,message,PRIMARY);
-			Message message2 (-1,getMemberNode()->addr,CREATE,key,value,SECONDARY);
-			updateOrDeleteReplica(newRing[secondReplica],idx,message2,PRIMARY);
+			updateOrDeleteReplica(hasMyReplicas[0],idx,DELETE,PRIMARY);
+			updateOrDeleteReplica(newRing[secondReplica],idx,CREATE,PRIMARY,SECONDARY);
 		}	
 		if(newRing[thirdReplica].nodeAddress != hasMyReplicas[1].nodeAddress){
-			Message message (-1,getMemberNode()->addr,DELETE,key);
-			updateOrDeleteReplica(hasMyReplicas[1],idx,message,PRIMARY);
-			Message message2 (-1,getMemberNode()->addr,CREATE,key,value,TERTIARY);
-			updateOrDeleteReplica(newRing[thirdReplica],idx,message2,PRIMARY);
+			updateOrDeleteReplica(hasMyReplicas[1],idx,DELETE,PRIMARY);
+			updateOrDeleteReplica(newRing[thirdReplica],idx,CREATE,PRIMARY,TERTIARY);
 		}	
 	}
 	// note that current node don't need to delete  replica part of its original two predecessors.
@@ -617,7 +597,44 @@ void MP2Node::stabilizationProtocol(vector<int> & joinedNodes, vector<int> & fai
 	//Check if there need to rehash part of current hashtable
 	// needed if there is new node joined between current node and predecessor
 	//But now we don't support new node join
-	
-	
+	int immediatePredecessor = (idx+newRing.size()-1)% newRing.size();
+	int secondPredecessor = (idx+newRing.size()-2) % newRing.size();
+	if(haveReplicasOf.size() == 0){
+		//do nothing
+	}
+	else{
+		// About the immediate predecessor failed: we need to consider the copy the key-value storage on this node
+		// First: the primary part of this node, need to copy to thirdreplica of current node
+		// Second: the secondary part of this node, if the second immediate predecessor doesn't fail, no need to copy. Why? think clearly
+		// 											otherwise, copy to second and third replica of current node
+		// 
+		// If predecessor didn't fail, we don't need to care about the second immediate predecessor
+		// Otherwise, only need to consider the replicate the primary part of second immediate predecessor.
+		if(newRing[immediatePredecessor].nodeAddress != haveReplicasOf[0].nodeAddress){
+			//if the original immediatePredecessor has failed
+			if(newRing[secondReplica].nodeAddress == hasMyReplicas[0].nodeAddress){
+				updateOrDeleteReplica(newRing[secondReplica],idx,UPDATE,SECONDARY,SECONDARY);
+			}
+			else{
+				updateOrDeleteReplica(newRing[secondReplica],idx,UPDATE,SECONDARY,SECONDARY);
+			}
+			updateOrDeleteReplica(newRing[thirdReplica],idx,CREATE,SECONDARY,TERTIARY);
+			updateLocalReplicaToPrimary(SECONDARY);
+			if(newRing[secondPredecessor].nodeAddress != haveReplicasOf[1].nodeAddress){
+				//second predecessor also failed
+				updateOrDeleteReplica(newRing[secondReplica],idx,CREATE,TERTIARY,SECONDARY);
+				updateOrDeleteReplica(newRing[thirdReplica],idx,CREATE,TERTIARY,TERTIARY);
+				updateLocalReplicaToPrimary(TERTIARY);	
+			}
+		}
+
+	}
+	hasMyReplicas.clear();
+	haveReplicasOf.clear();
+	hasMyReplicas.push_back(newRing[secondReplica]);
+	hasMyReplicas.push_back(newRing[thirdReplica];
+	haveReplicasOf.push_back(newRing[immediatePredecessor]
+	haveReplicasOf.push_back(newRing[secondPredecessor]);
+
 		
 }
