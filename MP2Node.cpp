@@ -27,6 +27,19 @@ MP2Node::~MP2Node() {
 }
 
 /**
+ *	Get index of current node in the ring table 
+ * @param  ring ring table
+ * @return      index
+ */
+int MP2Node::getIndexInRing(vector<Node> & ring){
+	for(i = 0;i < ring.size(); i++){
+		if(ring[i].nodeAddress == getMemberNode().nodeAddress){
+			return i;
+		}
+	}
+	return -1;
+}
+/**
  * FUNCTION NAME: updateRing
  *
  * DESCRIPTION: This function does the following:
@@ -45,6 +58,8 @@ void MP2Node::updateRing() {
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
 	 */
+	//TODO:should use a variable in MP1Node to show whether the membership has been updated
+	//		can save the following comparasion time
 	curMemList = getMembershipList();
 
 	/*
@@ -52,42 +67,53 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
-	bool stabilization = ring.size()==curMemList.size()?false:true;
-	if(!stabilization){
-		for(int i = 0;i < curMemList.size(); i++){
-			if(!(ring[i].nodeAddress == curMemList.nodeAddress)){
-				stabilization = true;
-				break;
-			}
+	bool stabilization = false;
+	//get all joined nodes and failed nodes
+	vector<int> joinedNodes;
+	vector<int> failedNodes;
+	int i = 0;
+	int j = 0;
+	while(i < ring.size() && j < curMemList.size()){
+		if(ring[i].getHashCode() == curMemList[j].getHashCode()){
+			i++,j++;
 		}
-		if(stabilization){
-			ring = curMemList;
+		else if(ring[i].getHashCode() < curMemList[j].getHashCode()){
+			failedNodes.push_back(ring[i].getHashCode());
+			i++;
+		}
+		else {
+			joinedNodes.push_back(curMemList[j].getHashCode());
+			j++;
 		}
 	}
-	else{
-		ring = curMemList;
+	while(i < ring.size()){
+		failedNodes.push_back(ring[i++].getHashCode());
+	}
+	while(j < curMemList.size()){
+		joinedNode.push_back(curMemList[j++].getHashCode());
 	}
 
+	if(joinedNodes.size() != 0 || failedNodes.size() != 0){
+		//new joined nodes or failed nodes
+		stabilization == true;
+	}
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
-	if(stabilization == true && ring.size() > 0){
+	if(stabilization == true ){
 		//first 
-		hasMyReplicas.clear();
-		haveReplicasOf.clear();
-		int i =0;
-		for(i = 0;i < ring.size(); i++){
-			if(ring[i].nodeAddress == getMemberNode().nodeAddress){
-				break;
-			}
-		}
-		hasMyReplicas.push_back(ring[(i+1)%RING_SIZE]);
-		hasMyReplicas.push_back(ring[(i+2)%RING_SIZE]);
-		haveReplicasOf.push_back(ring[(i-1)%RING_SIZE]);
-		haveReplicasOf.push_back(ring[(i-2)%RING_SIZE]);
-		stabilizationProtocol();
+		// hasMyReplicas.clear();
+		// haveReplicasOf.clear();
+		// int i =0;
+		// }
+		// hasMyReplicas.push_back(ring[(i+1)%RING_SIZE]);
+		// hasMyReplicas.push_back(ring[(i+2)%RING_SIZE]);
+		// haveReplicasOf.push_back(ring[(i-1)%RING_SIZE]);
+		// haveReplicasOf.push_back(ring[(i-2)%RING_SIZE]);
+		stabilizationProtocol(joinedNodes,failedNodes,ring,curMemList);
 	}
+	ring = curMemList;
 }
 
 /**
@@ -163,11 +189,13 @@ void MP2Node::clientCreateOrUpdate(string key,string value, MessageType messageT
 	}
 	else{
 		for(int i = 0, replicaType = PRIMARY;i <addrVec.size(); i++,replicaTyp++){
-			Message * message = new Message(transID,getMemberNode->addr,messageType,key,value,static_cast<ReplicaType>(replicaType));
+			Message * message = new Message(transID,getMemberNode()->addr,messageType,key,value,static_cast<ReplicaType>(replicaType));
 			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),message->toString());
+			delete(message);
 		}
 	}
 	pushNewTransactionInfo(key,value,transId,messageType);
+	free(messageVec);
 	return;
 }
 
@@ -183,11 +211,14 @@ void MP2Node::clientReadOrDelete(string key,MessageType messageType){
 	}
 	else{
 		for(int i = 0;i <addrVec.size(); i++){
-			Message * message = new Message(transId,getMemberNode->addr,messageType,key);
+			Message * message = new Message(transId,getMemberNode()->addr,messageType,key);
 			emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
+			delete(message);
 		}
 	}
 	pushNewTransactionInfo(key,NULL,transId,messageType);
+
+	free(messageVec);
 	return;
 }
 void MP2Node::clientCreate(string key, string value) {
@@ -260,7 +291,8 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
  */
 string MP2Node::readKey(string key) {
 	// Read key from local hash table and return value
-	return ht->read(key);
+	Entry entry (ht->read(key));
+	return entry.value;
 }
 
 /**
@@ -307,7 +339,6 @@ void MP2Node::replyMessageHandler(Message * msg){
 	  				}
 	  				else if(msg->type == REPLY){
 		  				switch(it->second.messageType){
-
 		  					case CREATE:
 		  						log->logCreateSuccess(&(getMemberNode()->addr),coordinator,msg->transId,it->second.key,it->second.value);
 		  						break;
@@ -391,7 +422,6 @@ void MP2Node::checkMessages() {
 	 */
 	char * data;
 	int size;
-
 	/*
 	 * Declare your local variables here
 	 */
@@ -454,10 +484,8 @@ void MP2Node::checkMessages() {
 				sendReplyMessage(msg,ifSuccess);
 				break;
 			case REPLY:
-				replyMessageHandler(msg);
-				break;
 			case READREPLY:
-				readReplyMessageHandler(msg);
+				replyMessageHandler(msg);
 				break;
 		}
 				
@@ -488,7 +516,6 @@ vector<Node> MP2Node::findNodes(string key) {
 		}
 		else {
 			// go through the ring until pos <= node
-			// 
 			// TODO: improve by using binary search
 			for (int i=1; i<ring.size(); i++){
 				Node addr = ring.at(i);
@@ -537,6 +564,60 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  *				1) Ensures that there are three "CORRECT" replicas of all the keys in spite of failures and joins
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
  */
-void MP2Node::stabilizationProtocol() {
+
+void MP2Node::updateOrDeleteReplica(Node &node, idx,Message &message, ReplicaType type){
+	map<string, string>::iterator it;
+	// create replicas on two successor nodes
+	for(it = ht->hashTable.begin(); it != ht->hashTable.end(); it++)
+	{
+		Entry * entry = new Entry(it->second);
+		if(entry->replica == type){
+			string value = entry->value;
+			string key = it->first;
+			//about the transId?
+			Message message (-1,getMemberNode()->addr,CREATE,key,value,SECONDARY);
+			emulNet->ENsend(&(memberNode->addr),&(node.nodeAddress),message->toString());
+		}
+		delete(entry);
+	}
+}
+void MP2Node::stabilizationProtocol(vector<int> & joinedNodes, vector<int> & failedNodes,
+									vector<Node> & ring, vector<Node> & newRing) {
+
+	//The whole process of stabilization is a little bit intricated
+	//better spend some time to think clearly of it
+	int idx = getIndexInRing(newRing);
+	int secondReplica = (idx+1) % newRing.size();
+	int thirdReplica = (idx+2) % newRing.size();
+	if(hasMyReplicas.size() == 0){
+		//current nodes's hashMyReplicas has not been set yet
+		Message message (-1,getMemberNode()->addr,CREATE,key,value,SECONDARY);
+		updateOrDeleteReplica(newRing[secondReplica],idx,message,PRIMARY);
+		Message message2 (-1,getMemberNode()->addr,CREATE,key,value,TERTIARY);
+		updateOrDeleteReplica(newRing[thirdReplica],idx,message2,PRIMARY);
+	}
+	else{
+		//if new successor is not same as original ones. Delete keys in original replicas and update new replicas
+		if(newRing[secondReplica].nodeAddress != hasMyReplicas[0].nodeAddress){
+			Message message (-1,getMemberNode()->addr,DELETE,key);
+			updateOrDeleteReplica(hasMyReplicas[0],idx,message,PRIMARY);
+			Message message2 (-1,getMemberNode()->addr,CREATE,key,value,SECONDARY);
+			updateOrDeleteReplica(newRing[secondReplica],idx,message2,PRIMARY);
+		}	
+		if(newRing[thirdReplica].nodeAddress != hasMyReplicas[1].nodeAddress){
+			Message message (-1,getMemberNode()->addr,DELETE,key);
+			updateOrDeleteReplica(hasMyReplicas[1],idx,message,PRIMARY);
+			Message message2 (-1,getMemberNode()->addr,CREATE,key,value,TERTIARY);
+			updateOrDeleteReplica(newRing[thirdReplica],idx,message2,PRIMARY);
+		}	
+	}
+	// note that current node don't need to delete  replica part of its original two predecessors.
+	// Why? cause the predecesscor will send delete message!
+	// 
+	//Check if there need to rehash part of current hashtable
+	// needed if there is new node joined between current node and predecessor
+	//But now we don't support new node join
+	
+	
 		
 }
