@@ -3,6 +3,8 @@
 1. Application layer: creates all members and start the each Node    
 2. P2P layer: a.Gossip membership layer b.key-value storage layer
 3. Emulated Network: send and push messages
+<br/>
+asd
 ## System Schema: Gossip membership protocol + Consistent hashing
 1. A key-value store supporting CRUD operations (Create, Read, Update, Delete).
 2. Load-balancing (via a consistent hashing ring to hash both servers and keys).
