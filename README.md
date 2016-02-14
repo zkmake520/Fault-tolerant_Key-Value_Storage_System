@@ -5,6 +5,7 @@
 3. Emulated Network: send and push messages
   <br/>
 asd
+<br/>
 ## System Schema: Gossip membership protocol + Consistent hashing##
 * A key-value store supporting CRUD operations (Create, Read, Update, Delete).
 * Load-balancing (via a consistent hashing ring to hash both servers and keys).
