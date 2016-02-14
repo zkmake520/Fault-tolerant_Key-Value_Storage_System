@@ -9,6 +9,7 @@
  * constructor
  */
 #define QUORUM 2
+#define TIME_OUT 20
 MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, Address * address) {
 	this->memberNode = memberNode;
 	this->par = par;
@@ -156,11 +157,9 @@ void MP2Node::clientCreateOrUpdate(string key,string value, MessageType messageT
 	}
 	int transId = g_transID++;
 	int a = (getMemberNode()->addr.addr[0]);
-	cout<<"TranId "<<transId<<" Node "<<a<<" Create "<<key<<" "<<value<<endl;
 	for(int i = 0, replicaType = PRIMARY;i <addrVec.size(); i++,replicaType++){
 		Message * message = new Message(transId,getMemberNode()->addr,messageType,key,value,static_cast<ReplicaType>(replicaType));
 		emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress),message->toString());
-		printf(" TO %d\n",addrVec[i].nodeAddress.addr[0]);
 		delete(message);
 	}
 	pushNewTransactionInfo(key,value,transId,messageType);
@@ -173,7 +172,6 @@ void MP2Node::clientReadOrDelete(string key,MessageType messageType){
 		return;
 	}
 	int transId = g_transID++;
-	cout<<"TranId "<<transId<<" Read or Delete "<<key<<endl;
 	for(int i = 0;i <addrVec.size(); i++){
 		Message * message = new Message(transId,getMemberNode()->addr,messageType,key);
 		emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
@@ -196,6 +194,8 @@ void MP2Node::clientCreate(string key, string value) {
  * 				3) Sends a message to the replica
  */
 void MP2Node::clientRead(string key){
+	int a = getMemberNode()->addr.addr[0];
+	cout<<"Client "<<a<<" need to read "<<key<<endl;
 	clientReadOrDelete(key,READ);
 }
 
@@ -252,7 +252,11 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
  */
 string MP2Node::readKey(string key) {
 	// Read key from local hash table and return value
-	Entry entry (ht->read(key));
+	string val = ht->read(key);
+	if(val == ""){
+		return "";	
+	}
+	Entry entry (val);
 	return entry.value;
 }
 
@@ -378,6 +382,39 @@ void MP2Node::sendReplyMessage(Message *msg,Address & addr,bool ifSuccess){
 }
 
 /**
+ * check whether transaction has been time out cause  the message failed to respond
+ */
+void MP2Node::checkTimeOutTransaction(){
+	bool coordinator = true;
+	int time = par->getcurrtime();
+	for(map<int,TransInfo>::iterator it = transInfos.begin(); it != transInfos.end();){
+		if(time - it->second.startTime >= TIME_OUT){
+			// this transaction need to be erased
+			switch(it->second.messageType){
+				case CREATE:
+					log->logCreateFail(&(getMemberNode()->addr),coordinator,it->first,it->second.key,it->second.value);
+					break;
+				case UPDATE:
+					log->logUpdateFail(&(getMemberNode()->addr),coordinator,it->first,it->second.key,it->second.value);
+					break;
+				case DELETE:
+					log->logDeleteFail(&(getMemberNode()->addr),coordinator,it->first,it->second.key);
+					break;
+				case READ:
+					log->logReadFail(&(getMemberNode()->addr),coordinator,it->first,it->second.key);
+				default:
+					break;
+		  	}
+		  	std::map<int, TransInfo>::iterator toErase = it;
+		  	it++;
+		    transInfos.erase(toErase);
+		}
+		else{
+			it++;
+		}
+	}
+}
+/**
  * FUNCTION NAME: checkMessages
  *
  * DESCRIPTION: This function is the message handler of this node.
@@ -481,11 +518,7 @@ void MP2Node::checkMessages() {
 				
 
 	}
-
-	/*
-	 * This function should also ensure all READ and UPDATE operation
-	 * get QUORUM replies
-	 */
+	checkTimeOutTransaction();
 }
 
 /**

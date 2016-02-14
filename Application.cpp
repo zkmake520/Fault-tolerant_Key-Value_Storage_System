@@ -170,6 +170,7 @@ void Application::mp1Run() {
 		 */
 		else if( par->getcurrtime() > (int)(par->STEP_RATE*i) && !(mp1[i]->getMemberNode()->bFailed) ) {
 			// handle messages and send heartbeats
+			if(par->getcurrtime()==500)
 			mp1[i]->nodeLoop();
 			#ifdef DEBUGLOG
 			if( (i == 0) && (par->globaltime % 500 == 0) ) {
@@ -584,7 +585,7 @@ void Application::readTest() {
 			replicas = mp2[number]->findNodes(it->first);
 
 			// Step 3.b. Fail two replicas
-			//cout<<"REPLICAS SIZE: "<<replicas.size();
+			cout<<"REPLICAS SIZE: "<<replicas.size();
 			if ( replicas.size() > 2 ) {
 				replicaIdToFail = TERTIARY;
 				while ( count != 2 ) {
@@ -661,7 +662,6 @@ void Application::readTest() {
 	if ( par->getcurrtime() == (TEST_TIME + FIRST_FAIL_TIME + STABILIZE_TIME + STABILIZE_TIME + LAST_FAIL_TIME ) ) {
 		// Step 4.a. Find a node that is alive
 		number = findARandomNodeThatIsAlive();
-
 		// Step 4.b Find a non - replica for this key
 		replicas.clear();
 		replicas = mp2[number]->findNodes(it->first);

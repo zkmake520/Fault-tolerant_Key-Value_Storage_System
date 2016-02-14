@@ -102,7 +102,7 @@ public:
 	int getIndexInRing(vector<Node> & ring);
 	void clientCreateOrUpdate(string key,string value, MessageType messageType);
 	void clientReadOrDelete(string key,MessageType messageType);
-
+	void checkTimeOutTransaction();
 	void replyMessageHandler(Message * msg);
 	void sendReplyMessage(Message *msg,Address &addr, string val);
 	void sendReplyMessage(Message *msg,Address &addr, bool ifSuccess);
