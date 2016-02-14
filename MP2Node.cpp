@@ -180,7 +180,6 @@ void MP2Node::clientReadOrDelete(string key,MessageType messageType){
 		delete(message);
 	}
 	pushNewTransactionInfo(key,"",transId,messageType);
-	// cout<<"TranId "<<transId<<" Read 222or Delete "<<key<<endl;
 	return;
 }
 void MP2Node::clientCreate(string key, string value) {
@@ -282,7 +281,6 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  */
 bool MP2Node::deletekey(string key) {
 	// Delete the key from the local hash table
-	cout<<"delete "<<key<<endl;
 	return ht->deleteKey(key);
 }
 
@@ -295,13 +293,25 @@ void MP2Node::replyMessageHandler(Message * msg){
 		map<int,TransInfo>::iterator it;
 		it = transInfos.find(transId);
 	  	if (it != transInfos.end()){
-			if(msg->success){
-	  			//if success replies have sum up to QUORUM, then coordinator knows the transaction is successful
-	  			if(++it->second.positiveReplyCount >= QUORUM){
-	  				if(msg->type == READREPLY){
+	  		if(msg->type == READREPLY){
+	  			if(msg->value != ""){
+	  				if((++it->second.positiveReplyCount) >= QUORUM){
 						log->logReadSuccess(&(getMemberNode()->addr),coordinator,msg->transID,it->second.key,msg->value);
-	  				}
-	  				else if(msg->type == REPLY){
+						transInfos.erase(it);
+					}
+	  			}
+	  			else{
+	  				if((++it->second.negativeReplyCount) >= QUORUM){
+						log->logReadFail(&(getMemberNode()->addr),coordinator,msg->transID,it->second.key);
+						transInfos.erase(it);
+					}
+
+	  			}
+	  		}
+	  		else{
+				if(msg->success){
+		  			//if success replies have sum up to QUORUM, then coordinator knows the transaction is successful
+		  			if((++it->second.positiveReplyCount) >= QUORUM){
 		  				switch(it->second.messageType){
 		  					case CREATE:
 		  						log->logCreateSuccess(&(getMemberNode()->addr),coordinator,msg->transID,it->second.key,it->second.value);
@@ -312,24 +322,14 @@ void MP2Node::replyMessageHandler(Message * msg){
 		  					case DELETE:
 		  						log->logDeleteSuccess(&(getMemberNode()->addr),coordinator,msg->transID,it->second.key);
 		  						break;
-		  					case READREPLY:
-		  						break;
 		  					default:
 		  						break;
-		  				}	
-		  				transInfos.erase(it);
-	  				}
-	  				else{
-	  					//wrong
-	  				}
-	  			}
-	  		}
-			else{
-				if(++it->second.negativeReplyCount >= QUORUM){
-					if(msg->type == READREPLY){
-						log->logReadFail(&(getMemberNode()->addr),coordinator,msg->transID,it->second.key);
-					}
-					else if(msg->type == REPLY){
+		  				}
+						transInfos.erase(it);
+		  			}
+		  		}
+				else{
+					if(++it->second.negativeReplyCount >= QUORUM){
 		  				switch(it->second.messageType){
 		  					case CREATE:
 		  						log->logCreateFail(&(getMemberNode()->addr),coordinator,msg->transID,it->second.key,it->second.value);
@@ -342,28 +342,28 @@ void MP2Node::replyMessageHandler(Message * msg){
 		  						break;
 		  					default:
 		  						break;
-
 		  				}	
-		  				transInfos.erase(it);
-					}
-					else{
-						//wrong message
-					}
-
-				}	
+						transInfos.erase(it);
+					}	
+				}
 			}
 		}
 		else{
-			// int a= getMemberNode()->addr.addr[0];
-			// cout<<a<<" Get wrong reply message "<<msg->transID<<endl;
+			//this transaction has been erased
 		}
+
 	}
 }
 
 void MP2Node::sendReplyMessage(Message *msg, Address &addr,string val){
-	Message * replyMessage = new Message(msg->transID,getMemberNode()->addr,val);
-	emulNet->ENsend(&(memberNode->addr),&(addr), msg->toString());
-	delete(replyMessage);
+	if(msg->transID != -1){
+		Message * replyMessage = new Message(msg->transID,getMemberNode()->addr,val);
+		int a = addr.addr[0];
+		int b = getMemberNode()->addr.addr[0];
+		cout<<"Send readReply from "<<b<<" to "<<a<<endl;
+		emulNet->ENsend(&(memberNode->addr),&(addr), replyMessage->toString());
+		delete(replyMessage);
+	}
 }
 
 void MP2Node::sendReplyMessage(Message *msg,Address & addr,bool ifSuccess){
@@ -371,7 +371,6 @@ void MP2Node::sendReplyMessage(Message *msg,Address & addr,bool ifSuccess){
 		Message * replyMessage = new Message(msg->transID,getMemberNode()->addr,REPLY,ifSuccess);
 		int a = addr.addr[0];
 		int b = getMemberNode()->addr.addr[0];
-		cout<<"Send reply from "<<b<<" to "<<a<<endl;
 		emulNet->ENsend(&(memberNode->addr),&(addr), replyMessage->toString());
 		delete(replyMessage);
 	}	
@@ -416,6 +415,7 @@ void MP2Node::checkMessages() {
 		bool ifUpdateSuccess = false;
 		bool ifDeleteSuccess = false;
 		string val;
+		int a;
 		Message * msg = new Message(message);
 		// cout<<"Msg "<<msg->toString()<<endl;
 		// break;
@@ -465,10 +465,6 @@ void MP2Node::checkMessages() {
 					}
 					else{
 						log->logDeleteFail(&(getMemberNode()->addr),notCoordinator,msg->transID,msg->key);	
-					}
-					if(par->getcurrtime() == 102){
-						int a = msg->fromAddr.addr[0];
-						// cout<<"Get delete meesage from "<<a<<endl;
 					}
 					sendReplyMessage(msg,msg->fromAddr,ifDeleteSuccess);
 				}
@@ -598,7 +594,6 @@ void MP2Node::updateOrDeleteReplica(Node &node, int idx, MessageType messageType
 }
 void MP2Node::stabilizationProtocol( vector<Node> & newRing) {
 	int a = (getMemberNode()->addr.addr)[0];
-	cout<<a<<endl;
 	//The whole process of stabilization is a little bit intricated
 	//better spend some time to think clearly of it
 	//The total idea is that current node has three types of replicas, so copy or replicate them one by one!
