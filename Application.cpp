@@ -124,9 +124,7 @@ int Application::run()
 	en->ENcleanup();
 	en1->ENcleanup();
 
-	cout<<"finish"<<endl;
 	for(i=0;i<=par->EN_GPSZ-1;i++) {
-		cout<<"finish"<<i<<endl;
 		 mp1[i]->finishUpThisNode();
 	}
 

@@ -173,14 +173,14 @@ void MP2Node::clientReadOrDelete(string key,MessageType messageType){
 		return;
 	}
 	int transId = g_transID++;
-	cout<<"TranId "<<transId<<" Read "<<key<<endl;
+	cout<<"TranId "<<transId<<" Read or Delete "<<key<<endl;
 	for(int i = 0;i <addrVec.size(); i++){
-
 		Message * message = new Message(transId,getMemberNode()->addr,messageType,key);
 		emulNet->ENsend(&(memberNode->addr),&(addrVec[i].nodeAddress), message->toString());
 		delete(message);
 	}
-	pushNewTransactionInfo(key,NULL,transId,messageType);
+	pushNewTransactionInfo(key,"",transId,messageType);
+	// cout<<"TranId "<<transId<<" Read 222or Delete "<<key<<endl;
 	return;
 }
 void MP2Node::clientCreate(string key, string value) {
@@ -282,6 +282,7 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
  */
 bool MP2Node::deletekey(string key) {
 	// Delete the key from the local hash table
+	cout<<"delete "<<key<<endl;
 	return ht->deleteKey(key);
 }
 
@@ -429,10 +430,6 @@ void MP2Node::checkMessages() {
 					else{
 						log->logCreateFail(&(getMemberNode()->addr),notCoordinator,msg->transID,msg->key,msg->value);	
 					}
-					if(par->getcurrtime() == 102){
-						int a = msg->fromAddr.addr[0];
-						cout<<"Get create msg on 102 from "<<a<<endl;
-					}
 					sendReplyMessage(msg,msg->fromAddr,ifCreateSuccess);
 				}
 				break;
@@ -468,6 +465,10 @@ void MP2Node::checkMessages() {
 					}
 					else{
 						log->logDeleteFail(&(getMemberNode()->addr),notCoordinator,msg->transID,msg->key);	
+					}
+					if(par->getcurrtime() == 102){
+						int a = msg->fromAddr.addr[0];
+						// cout<<"Get delete meesage from "<<a<<endl;
 					}
 					sendReplyMessage(msg,msg->fromAddr,ifDeleteSuccess);
 				}
@@ -584,12 +585,10 @@ void MP2Node::updateOrDeleteReplica(Node &node, int idx, MessageType messageType
 			//about the transId?
 			if(messageType == CREATE){
 				Message message (-1,getMemberNode()->addr,messageType,key,value,replicaType);
-				cout<<"fff"<<endl;
 				emulNet->ENsend(&(memberNode->addr),&(node.nodeAddress),message.toString());
 			}
 			else{
 				Message message (-1,getMemberNode()->addr,messageType,key);
-				cout<<"fff2"<<endl;
 				emulNet->ENsend(&(memberNode->addr),&(node.nodeAddress),message.toString());
 			}
 			
