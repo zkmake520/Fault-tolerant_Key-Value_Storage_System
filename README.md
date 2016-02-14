@@ -1,5 +1,5 @@
 # Fault-tolerant key-value storage system 
-##There are 3 layers:   
+## There are 3 layers:   
 1. Application layer: creates all members and start the each Node    
 2. P2P layer: a.Gossip membership layer b.key-value storage layer
 3. Emulated Network: send and push messages
