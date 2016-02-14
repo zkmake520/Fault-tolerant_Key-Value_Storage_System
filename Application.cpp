@@ -82,7 +82,7 @@ Application::~Application() {
 	delete en1;
 	for ( int i = 0; i < par->EN_GPSZ; i++ ) {
 		delete mp1[i];
-		delete mp2[i];
+	    delete mp2[i];
 	}
 	free(mp1);
 	free(mp2);
@@ -124,7 +124,9 @@ int Application::run()
 	en->ENcleanup();
 	en1->ENcleanup();
 
+	cout<<"finish"<<endl;
 	for(i=0;i<=par->EN_GPSZ-1;i++) {
+		cout<<"finish"<<i<<endl;
 		 mp1[i]->finishUpThisNode();
 	}
 
@@ -217,7 +219,6 @@ void Application::mp2Run() {
 			mp2[i]->checkMessages();
 		}
 	}
-
 	/**
 	 * Insert a set of test key value pairs into the system
 	 */

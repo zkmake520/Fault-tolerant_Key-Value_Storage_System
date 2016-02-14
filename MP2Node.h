@@ -36,7 +36,8 @@ typedef struct transactionInfo{
 	int negativeReplyCount;
 	string key;
 	string value;
-}TransInfo
+}TransInfo;
+
 class MP2Node {
 private:
 	// Vector holding the next two neighbors in the ring who have my replicas
@@ -96,9 +97,17 @@ public:
 	bool deletekey(string key);
 
 	// stabilization protocol - handle multiple failures
-	void stabilizationProtocol(vector<int> &joinedNodes, vector<int> &failedNodes
-								vector<Node> &ring, vector<Node> newRing);
+	void stabilizationProtocol(vector<Node> &newRing);
+	void pushNewTransactionInfo(string key, string value,int transId, MessageType messageType);
+	int getIndexInRing(vector<Node> & ring);
+	void clientCreateOrUpdate(string key,string value, MessageType messageType);
+	void clientReadOrDelete(string key,MessageType messageType);
 
+	void replyMessageHandler(Message * msg);
+	void sendReplyMessage(Message *msg,Address &addr, string val);
+	void sendReplyMessage(Message *msg,Address &addr, bool ifSuccess);
+	void updateLocalReplicaToPrimary(ReplicaType type);
+	void updateOrDeleteReplica(Node &node,int  idx, MessageType messageType, ReplicaType type,ReplicaType replicaType);
 	~MP2Node();
 };
 
